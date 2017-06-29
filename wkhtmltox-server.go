@@ -40,8 +40,8 @@ func run_wkhtmltopdf(response http.ResponseWriter, html string, args []string) {
     fmt.Println("done")
 }
 
-func prepare_args(grayscale bool, lowquality bool, orientation string, pagesize string, title string) ([]string) {
-    args := []string{}
+func prepare_pdf_args(grayscale bool, lowquality bool, orientation string, pagesize string, title string) ([]string) {
+    args := []string{"--encoding", "utf-8"}
     if grayscale {
         args = append(args, "--grayscale")
     }
@@ -74,7 +74,7 @@ func handle_pdf(response http.ResponseWriter, request *http.Request) {
         response.WriteHeader(400)
         return
     }
-    html:= fmt.Sprintf("%s", bhtml)
+    html := fmt.Sprintf("%s", bhtml)
     if html == "" {
         response.WriteHeader(400)
         return
@@ -106,8 +106,34 @@ func handle_pdf(response http.ResponseWriter, request *http.Request) {
 
     titleOpt := request.URL.Query().Get("title")
 
-    args := prepare_args(grayscaleOpt, lowqualityOpt, orientationOpt, pagesizeOpt, titleOpt)
+    args := prepare_pdf_args(grayscaleOpt, lowqualityOpt, orientationOpt, pagesizeOpt, titleOpt)
     run_wkhtmltopdf(response, html, args)
+}
+
+func handle_license(response http.ResponseWriter, request *http.Request) {
+    if request.Method != "GET" {
+        response.WriteHeader(405)
+        response.Header().Set("Allow", "GET")
+        return
+    }
+
+    binPath := os.Getenv("WKHTMLTOPDF_PATH")
+    if binPath == "" {
+        // The exec module will use PATH if it needs to, so this is fine
+        binPath = "wkhtmltopdf"
+    }
+    cmd := exec.Command(binPath, "--license")
+    cmd.Stdout = response
+    fmt.Printf("Printing license... ")
+    response.Header().Set("Content-type", "text/plain")
+    if err := cmd.Start(); err != nil {
+        response.WriteHeader(500)
+        fmt.Println("An error occurred: ", err)
+        return
+    }
+
+    cmd.Wait()
+    fmt.Println("done")
 }
 
 func main() {
@@ -131,6 +157,7 @@ func main() {
 
     http.HandleFunc("/pdf", handle_pdf)
     //http.HandleFunc("/image", handle_image)
+    http.HandleFunc("/license", handle_license)
     fmt.Println(fmt.Sprintf("Starting webserver on port %d", portNumber))
     http.ListenAndServe(fmt.Sprintf(":%d", portNumber), nil)
 }
